@@ -18,12 +18,12 @@ class TraceAll(BaseAnalysis):
     
     def log(self, iid: int, *args, **kwargs):
         res = ''
-        # for arg in args:
-        #     if 'danger_of_recursion' in kwargs:
-        #         res += ' ' + str(hex(id(arg)))
-        #     else:
-        #         res += ' ' + str(arg)
-        logging.info(str(iid) + ': ' + res[:80])
+        for arg in args:
+            if 'danger_of_recursion' in kwargs:
+                res += ' ' + str(hex(id(arg)))
+            else:
+                res += ' ' + str(arg)
+        logging.info(str(iid) + ': ' + res)
 
     # Literals
     
@@ -324,7 +324,7 @@ class TraceAll(BaseAnalysis):
         Any
             If provided, overwrites the result of the operation.
         """
-        self.log(iid, 'Unary Operation', arg, '->', result)
+        self.log(iid, 'Unary Operation', opr, arg, '->', result)
     
     def bit_invert(self, dyn_ast: str, iid: int, arg: Any, result: Any) -> Any:
         self.log(iid, 'Unary Operation', arg, '->', result)
@@ -413,13 +413,13 @@ class TraceAll(BaseAnalysis):
         Any
             If provided, overwrites the returned value.
         """
-        self.log(iid, 'Accessing')
+        self.log(iid, 'Accessing value: ', val)
     
     def read(self, dyn_ast: str, iid: int, val: Any) -> Any:
-        self.log(iid, ' Reading')
+        self.log(iid, '  Reading: ', val)
     
     def read_identifier(self, dyn_ast: str, iid: int, val: Any) -> Any:
-        self.log(iid, '    Reading')
+        self.log(iid, '    Reading Identifier: ', val)
 
     def write(self, dyn_ast: str, iid: int, old_vals: List[Callable], new_val: Any) -> Any:
         """Hook for writes.
@@ -443,7 +443,7 @@ class TraceAll(BaseAnalysis):
         Any
             If provided, overwrites the returned value.
         """
-        self.log(iid, '    Writing')
+        self.log(iid, 'Writing value, old values: ', old_vals, 'new value: ', new_val)
 
     def delete(self, dyn_ast: str, iid: int, val: Any) -> Optional[bool]:
         """Hook for deletes.
@@ -536,7 +536,7 @@ class TraceAll(BaseAnalysis):
         else:
             return
         if (not is_lambda) and (get_node_by_location(ast, iids.iid_to_location[iid], m.FunctionDef()).name in ['__str__', '__repr__']):
-            self.log(iid, 'Entered function', danger_of_recursion=True)
+            self.log(iid, 'Entered function', name, danger_of_recursion=True)
 
     def function_exit(self, dyn_ast: str, iid: int, function_iid: int, name: str, result: Any) -> Any:
         """Hook for exiting an instrumented function.
@@ -559,7 +559,7 @@ class TraceAll(BaseAnalysis):
         Any
             If provided, overwrites the returned value.
         """
-        self.log(iid, 'Exiting function')
+        self.log(iid, 'Exiting function', name)
     
     def _return(self, dyn_ast: str, iid: int, value: Any) -> Any:
         self.log(iid, '   Returning', value)
@@ -585,7 +585,8 @@ class TraceAll(BaseAnalysis):
         kw_args : Dict
             The keyword arguments passed to the function.
         """
-        self.log(iid, 'Before function call')
+        self.log(iid, 'Before function call: ', function,
+                 'positional arguments: ', pos_args, 'keyword arguments: ', kw_args)
     
     def post_call(self, dyn_ast: str, iid: int, result: Any, call: Callable, pos_args: Tuple, kw_args: Dict) -> Any:
         """Hook called after a function call.
@@ -610,7 +611,7 @@ class TraceAll(BaseAnalysis):
         Any
             If provided, overwrites the returned value.
         """
-        self.log(iid, 'After function call')
+        self.log(iid, 'After function call to', call, 'with result', result)
 
     # Statements
     
