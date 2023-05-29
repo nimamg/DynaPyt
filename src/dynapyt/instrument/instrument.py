@@ -109,7 +109,7 @@ if __name__ == '__main__':
             print(f'--ignore was used but file is not valid json {e}')
             exit(1)
     else:
-        ignore = []
+        ignore = {}
 
     class_ = getattr(module, args.analysis)
     instance = class_()
