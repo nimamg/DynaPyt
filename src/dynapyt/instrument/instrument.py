@@ -7,6 +7,7 @@ from libcst._exceptions import ParserSyntaxError
 from .CodeInstrumenter import CodeInstrumenter
 from .IIDs import IIDs
 import re
+import json
 from shutil import copyfile
 from dynapyt.utils.hooks import get_hooks_from_analysis
 
@@ -17,6 +18,11 @@ parser.add_argument(
     "--analysis", help="Analysis class name")
 parser.add_argument(
     "--module", help="Adds external module paths")
+parser.add_argument(
+    "--ignore", help="Path to a json file containing two keys, 'title' and 'content', which are lists of strings."
+                     " If a file path contains any of the strings in 'title' or the file contains any of the strings in"
+                     " 'content', it will be ignored.",
+)
 
 def gather_files(files_arg):
     if len(files_arg) == 1 and files_arg[0].endswith('.txt'):
@@ -49,9 +55,18 @@ def instrument_code(src, file_path, iids, selected_hooks):
         print(f'Syntax error in {file_path} -- skipping it')
         return None
 
-def instrument_file(file_path, selected_hooks):
+def instrument_file(file_path, selected_hooks, ignore_keywords):
+    if any(keyword in file_path for keyword in ignore_keywords.get('title', [])):
+        print(f'Ignoring {file_path}')
+        return
+
     with open(file_path, 'r') as file:
         src = file.read()
+
+    if any(keyword in src for keyword in ignore_keywords.get('content', [])):
+        print(f'Ignoring {file_path}')
+        return
+
     iids = IIDs(file_path)
 
     instrumented_code = instrument_code(src, file_path, iids, selected_hooks)
@@ -72,6 +87,7 @@ if __name__ == '__main__':
     files = gather_files(args.files)
     additional_module = args.module
     analysis = args.analysis
+    ignore = args.ignore
     modulePath = 'dynapyt.analyses'
     if additional_module is not None:
         modulePath = additional_module
@@ -82,16 +98,29 @@ if __name__ == '__main__':
     except ImportError as e:
         print(f'module could not be imported {e}')
 
+    if ignore is not None:
+        try:
+            with open(ignore) as f:
+                ignore = json.load(f)
+        except FileNotFoundError as e:
+            print(f'--ignore was used but no file found {e}')
+            exit(1)
+        except json.decoder.JSONDecodeError as e:
+            print(f'--ignore was used but file is not valid json {e}')
+            exit(1)
+    else:
+        ignore = []
+
     class_ = getattr(module, args.analysis)
     instance = class_()
     method_list = [func for func in dir(instance) if callable(getattr(instance, func)) and not func.startswith("__")]
     selected_hooks = get_hooks_from_analysis(set(method_list))
     if len(files) < 2:
         for file_path in files:
-            instrument_file(file_path, selected_hooks)
+            instrument_file(file_path, selected_hooks, ignore)
     else:
         arg_list = []
         for file_path in files:
-            arg_list.append((file_path, selected_hooks))
+            arg_list.append((file_path, selected_hooks, ignore))
         with Pool() as p:
             p.starmap(instrument_file, arg_list)

@@ -6,6 +6,7 @@ import shutil
 from subprocess import run
 import time
 from multiprocessing import Pool
+import json
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -17,6 +18,11 @@ parser.add_argument(
 parser.add_argument(
     "--external_dir", help="Place instrumented files in another directory",
     dest='external_dir', action='store_true'
+)
+parser.add_argument(
+    "--ignore", help="Path to a json file containing two keys, 'title' and 'content', which are lists of strings."
+                     " If a file path contains any of the strings in 'title' or the file contains any of the strings in"
+                     " 'content', it will be ignored.",
 )
 
 def process_files(cmd_list, file_path):
@@ -39,12 +45,34 @@ if __name__ == '__main__':
         shutil.rmtree(external_path, ignore_errors=True)
         shutil.copytree(start, external_path)
         start = str(external_path)
-    
+
+    if args.ignore is not None:
+        ignore_file = args.ignore
+        try:
+            with open(ignore_file) as f:
+                ignore_dict = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            print(f'Error reading ignore file {e}')
+            exit(1)
+        print('Ignoring files with title containing:', ignore_dict.get('title', []))
+        ignore_title = ignore_dict.get('title', [])
+    else:
+        ignore_title = []
+
     for dir_path, dir_names, file_names in walk(start):
+        if any(title in dir_path for title in ignore_title):
+            print('Ignoring directory', dir_path)
+            continue
         for name in file_names:
+            if any(title in name for title in ignore_title):
+                print('Ignoring file', name)
+                continue
             if name.endswith('.py'):
                 file_path = path.join(dir_path, name)
-                cmd_list = ['python', '-m', 'dynapyt.instrument.instrument', '--files', file_path, '--analysis', analysis]
+                cmd_list = ['python', '-m', 'dynapyt.instrument.instrument',
+                            '--files', file_path, '--analysis', analysis]
+                if args.ignore is not None:
+                    cmd_list.extend(['--ignore', ignore_file])
                 if module is not None:
                     cmd_list.extend(['--module', module])
                 all_cmds.append((cmd_list, file_path))
