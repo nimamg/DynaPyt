@@ -9,6 +9,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--entry", help="Entry file for execution")
 parser.add_argument(
+    "--args", help="Arguments for entry file", nargs="*"
+)
+parser.add_argument(
     "--analysis", help="Analysis class name")
 parser.add_argument(
     "--module", help="Adds external module paths")
@@ -76,6 +79,8 @@ if __name__ == '__main__':
         pass
     if args.entry.endswith('.py'):
         sys.argv = [args.entry]
+        if args.args is not None:
+            sys.argv.extend(args.args)
         exec(open(abspath(args.entry)).read())
     else:
         importlib.import_module(args.entry, '*')
