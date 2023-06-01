@@ -78,10 +78,13 @@ if __name__ == '__main__':
     except AttributeError:
         pass
     if args.entry.endswith('.py'):
-        sys.argv = [args.entry]
+        # sys.argv = [args.entry]
+        # if args.args is not None:
+        #     sys.argv.extend(args.args)
+        argv = [args.entry]
         if args.args is not None:
-            sys.argv.extend(args.args)
-        exec(open(abspath(args.entry)).read())
+            argv.extend(args.args)
+        exec(open(abspath(args.entry)).read(), {'argv': argv})
     else:
         importlib.import_module(args.entry, '*')
     end_execution()
