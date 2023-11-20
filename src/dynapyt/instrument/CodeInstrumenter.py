@@ -651,9 +651,9 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
             name_source = []
         if (((len(list(name_source)) > 0) and (list(name_source)[0].source == QualifiedNameSource.BUILTIN) and (original_node.func.value in site_sensitive_functions)) or 
             (any(a for a in updated_node.args if m.matches(a.value, m.GeneratorExp())))):
-            call_arg = cst.Arg(value=updated_node)
+            call_arg = cst.Arg(value=updated_node.func)
             only_post = cst.Arg(value=cst.Name('True'))
-            call = cst.Call(func=callee_name, args=[ast_arg, iid_arg, call_arg, only_post, cst.Arg(value=cst.Name('None')), cst.Arg(value=cst.Name('None'))], lpar=original_node.lpar, rpar=original_node.rpar)
+            call = cst.Call(func=callee_name, args=[ast_arg, iid_arg, call_arg, only_post, positional_args, keyword_args], lpar=original_node.lpar, rpar=original_node.rpar)
         else:
             call_arg = cst.Arg(value=updated_node.func)
             only_post = cst.Arg(value=cst.Name('False'))
