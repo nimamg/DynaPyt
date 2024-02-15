@@ -7,10 +7,12 @@ from shutil import rmtree
 import sys
 from pathlib import Path
 from . import runtime as _rt
+from .utils.load_class_from_path import load_class_from_path
+from .utils.base_initial_configuration import BaseInitialConfiguration
 
 
 def run_analysis(
-    entry: str, analyses: List[str], name: str = None, coverage: bool = False
+    entry: str, analyses: List[str], name: str = None, coverage: bool = False, init = None, entry_args = None,
 ):
     coverage_dir = Path(gettempdir()) / "dynapyt_coverage"
     if coverage:
@@ -24,6 +26,14 @@ def run_analysis(
     with open(str(analyses_file), "w") as f:
         f.write("\n".join(analyses))
 
+    if init is not None:
+        init_config = load_class_from_path(init)
+        if init_config is None:
+            raise ValueError("init config not found")
+        if not isinstance(init_config, BaseInitialConfiguration):
+            raise ValueError("init config should be a subclass of BaseInitialConfiguration")
+        init_config.setup()
+
     _rt.set_analysis(analyses)
 
     for analysis in _rt.analyses:
@@ -31,12 +41,12 @@ def run_analysis(
         if func is not None:
             func()
     if entry.endswith(".py"):
-        sys.argv = [entry]
+        argv = [entry, *entry_args]
         entry_full_path = abspath(entry)
         globals_dict = globals().copy()
         sys.path.insert(0, str(Path(entry_full_path).parent))
         globals_dict["__file__"] = entry_full_path
-        exec(open(entry_full_path).read(), globals_dict)
+        exec(open(entry_full_path).read(), {'argv': argv, **globals_dict})
     else:
         importlib.import_module(entry)
     _rt.end_execution()
@@ -50,7 +60,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--name", help="Associates a given name with current run")
     parser.add_argument("--coverage", help="Enables coverage", action="store_true")
+    parser.add_argument("--init", help="Runs initial configuration")
+    parser.add_argument("--args", help="Arguments to pass to entry file", nargs="*")
     args = parser.parse_args()
     name = args.name
     analyses = args.analysis
-    run_analysis(args.entry, analyses, name, args.coverage)
+    coverage = args.coverage
+    init = args.init
+    entry_args = args.args or []
+    run_analysis(args.entry, analyses, name, coverage, init, entry_args)
