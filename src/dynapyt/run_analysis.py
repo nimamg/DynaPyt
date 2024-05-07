@@ -9,6 +9,9 @@ import sys
 import uuid
 import json
 from pathlib import Path
+
+from dynapyt.utils.initialConfiguration import BaseInitialConfiguration
+from dynapyt.utils.load_class_from_path import load_class_from_path
 from .utils.runtimeUtils import merge_coverage
 
 session_id = str(uuid.uuid4())
@@ -23,6 +26,8 @@ def run_analysis(
     coverage: bool = False,
     coverage_dir: str = None,
     script: str = None,
+    init : str = None,
+    entry_args : List[str] = None,
 ) -> str:
     """
     The main function to run the analysis on instrumented code.
@@ -50,6 +55,9 @@ def run_analysis(
     str
         The session id for the current run
     """
+    if entry_args is None:
+        entry_args = []
+
     if coverage:
         if coverage_dir is None:
             coverage_dir = gettempdir()
@@ -71,6 +79,14 @@ def run_analysis(
     analyses = [f"{a};output_dir={str(output_dir)}" for a in analyses]
     with open(str(analyses_file), "w") as f:
         f.write("\n".join(analyses))
+
+    if init is not None:
+        init_config = load_class_from_path(init)
+        if init_config is None:
+            raise ValueError("init config not found")
+        if not isinstance(init_config, BaseInitialConfiguration):
+            raise ValueError("init config should be a subclass of BaseInitialConfiguration")
+        init_config.setup()
 
     if script is None and not entry.endswith(".py"):
         if importlib.util.find_spec(entry) is None:
@@ -124,12 +140,19 @@ if __name__ == "__main__":
     )
     parser.add_argument("--name", help="Associates a given name with current run")
     parser.add_argument("--coverage", help="Enables coverage", action="store_true")
+    parser.add_argument("--init", help="Runs initial configuration")
+    parser.add_argument("--args", help="Arguments to pass to entry file", nargs="*")
     args = parser.parse_args()
     name = args.name
     analyses = args.analysis
+    coverage = args.coverage
+    init = args.init
+    entry_args = args.args or []
     run_analysis(
         entry=args.entry,
         analyses=analyses,
         name=name,
-        coverage=args.coverage
+        coverage=args.coverage,
+        init=init,
+        entry_args=entry_args,
     )
