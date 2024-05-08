@@ -72,10 +72,10 @@ def run_analysis(
     else:
         output_dir = Path(output_dir) / f"dynapyt_output-{session_id}"
     if not output_dir.exists():
-        output_dir.mkdir()
+        output_dir.mkdir(parents=True)
     else:
         rmtree(output_dir)
-        output_dir.mkdir()
+        output_dir.mkdir(parents=True)
     analyses = [f"{a};output_dir={str(output_dir)}" for a in analyses]
     with open(str(analyses_file), "w") as f:
         f.write("\n".join(analyses))
