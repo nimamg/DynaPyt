@@ -142,12 +142,14 @@ if __name__ == "__main__":
     parser.add_argument("--coverage", help="Enables coverage", action="store_true")
     parser.add_argument("--init", help="Runs initial configuration")
     parser.add_argument("--args", help="Arguments to pass to entry file", nargs="*")
+    parser.add_argument("--output", help="Output directory")
     args = parser.parse_args()
     name = args.name
     analyses = args.analysis
     coverage = args.coverage
     init = args.init
     entry_args = args.args or []
+    output_dir = args.output
     run_analysis(
         entry=args.entry,
         analyses=analyses,
@@ -155,4 +157,5 @@ if __name__ == "__main__":
         coverage=args.coverage,
         init=init,
         entry_args=entry_args,
+        output_dir=output_dir,
     )
