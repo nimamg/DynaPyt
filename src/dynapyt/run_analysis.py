@@ -98,6 +98,7 @@ def run_analysis(
         globals_dict = globals().copy()
         sys.path.insert(0, str(Path(entry_full_path).parent))
         globals_dict["__file__"] = entry_full_path
+        globals_dict["__name__"] = "__main__"
         if script is not None:
             exec(script, globals_dict)
         elif entry.endswith(".py"):
