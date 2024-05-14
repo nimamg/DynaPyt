@@ -93,7 +93,7 @@ def run_analysis(
             raise ValueError(f"Could not find entry {entry}")
         importlib.import_module(entry)
     else:
-        sys.argv = [entry]
+        sys.argv = [entry, *entry_args]
         entry_full_path = abspath(entry)
         globals_dict = globals().copy()
         sys.path.insert(0, str(Path(entry_full_path).parent))
