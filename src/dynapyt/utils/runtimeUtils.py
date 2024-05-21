@@ -2,6 +2,8 @@ from typing import List, Any
 from ..analyses.BaseAnalysis import BaseAnalysis
 from .load_class_from_path import load_class_from_path
 
+PRIORITIZE_OLD_ARGS = 1
+PRIORITIZE_NEW_ARGS = 2
 
 def load_analyses(analyses: List[Any]) -> List[BaseAnalysis]:
     res_analyses = []

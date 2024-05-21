@@ -18,7 +18,7 @@ import libcst as cst
 from .utils.hooks import snake, get_name
 from .instrument.IIDs import IIDs
 from .instrument.filters import START, END, SEPERATOR
-from .utils.runtimeUtils import load_analyses
+from .utils.runtimeUtils import load_analyses, PRIORITIZE_NEW_ARGS, PRIORITIZE_OLD_ARGS
 
 analyses = None
 covered = None
@@ -398,8 +398,36 @@ def _call_(dyn_ast, iid, call, only_post, pos_args, kw_args):
             else:
                 kw_args = dict(kw_args, **a)
         pos_args = tuple(tmp)
-        call_if_exists("pre_call", dyn_ast, iid, call, pos_args, kw_args)
-        result = call(*pos_args, **kw_args)
+        function_args = call_if_exists("pre_call", dyn_ast, iid, call, pos_args, kw_args)
+        if function_args is not None:
+            if isinstance(function_args, tuple):
+                if len(function_args) == 2:
+                    new_pos_args, new_kw_args = function_args
+                    priority = PRIORITIZE_NEW_ARGS
+                elif len(function_args) == 3:
+                    new_pos_args, new_kw_args, priority = function_args
+                    if priority not in (PRIORITIZE_OLD_ARGS, PRIORITIZE_NEW_ARGS):
+                        raise ValueError("The priority must be either PRIORITIZE_OLD_ARGS(1) or PRIORITIZE_NEW_ARGS(2).")
+                else:
+                    raise ValueError("The precall hook must return a tuple of (pos_args, kw_args), a tuple of "
+                                     "(pos_args, kw_args, priority), or None. ")
+            else:
+                raise ValueError("The precall hook must return a tuple of (pos_args, kw_args), a tuple of "
+                                 "(pos_args, kw_args, priority), or None. ")
+            if priority == PRIORITIZE_OLD_ARGS:
+                try:
+                    result = call(*pos_args, **kw_args)
+                except Exception as e:
+                    print(e)
+                    result = call(*new_pos_args, **new_kw_args)
+            else:
+                try:
+                    result = call(*new_pos_args, **new_kw_args)
+                except Exception as e:
+                    print(e)
+                    result = call(*pos_args, **kw_args)
+        else:
+            result = call(*pos_args, **kw_args)
         new_res = call_if_exists(
             "post_call", dyn_ast, iid, result, call, pos_args, kw_args
         )
