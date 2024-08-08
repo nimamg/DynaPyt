@@ -1,6 +1,16 @@
 import logging
 from types import TracebackType
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 import libcst.matchers as m
 from .BaseAnalysis import BaseAnalysis
 from ..utils.nodeLocator import get_node_by_location
@@ -11,8 +21,8 @@ class TraceAll(BaseAnalysis):
     .. include:: ../../../docs/hooks.md
     """
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
         handler = logging.FileHandler("output.log", "w", "utf-8")
@@ -20,13 +30,9 @@ class TraceAll(BaseAnalysis):
         root_logger.addHandler(handler)
 
     def log(self, iid: int, *args, **kwargs):
-        res = ""
-        # for arg in args:
-        #     if 'danger_of_recursion' in kwargs:
-        #         res += ' ' + str(hex(id(arg)))
-        #     else:
-        #         res += ' ' + str(arg)
-        logging.info(str(iid) + ": " + res[:80])
+        args_str = " ".join([str(x) for x in args])
+        kwargs_str = " ".join([f"{k}={v}" for k, v in kwargs.items()])
+        logging.info(f"{iid}: {args_str} {kwargs_str}")
 
     # Literals
 
@@ -70,6 +76,7 @@ class TraceAll(BaseAnalysis):
         -------
         Any
             If provided, overwrites the value of the float literal.
+        @public
         """
         self.log(iid, "    Float", "value:", val)
 
@@ -214,7 +221,7 @@ class TraceAll(BaseAnalysis):
         -------
         List
             If provided, overwrites the value of the list.
-
+        @public
         """
         self.log(iid, "List", value)
 
@@ -243,7 +250,7 @@ class TraceAll(BaseAnalysis):
         -------
         tuple
             If provided, overwrites the value of the tuple.
-
+        @public
         """
         self.log(iid, "Tuple", "items:", items)
 
@@ -272,7 +279,7 @@ class TraceAll(BaseAnalysis):
         -------
         set
             If provided, overwrites the value of the set.
-
+        @public
         """
         self.log(iid, "Set", "items:", items)
 
@@ -424,9 +431,11 @@ class TraceAll(BaseAnalysis):
         self.log(iid, "Binary Operation", left, right, "->", result)
 
     def _and(self, dyn_ast: str, iid: int, left: Any, right: Any, result: Any) -> Any:
+        """@public"""
         self.log(iid, "Binary Operation", left, right, "->", result)
 
     def _or(self, dyn_ast: str, iid: int, left: Any, right: Any, result: Any) -> Any:
+        """@public"""
         self.log(iid, "Binary Operation", left, right, "->", result)
 
     def unary_operation(
@@ -468,6 +477,7 @@ class TraceAll(BaseAnalysis):
         self.log(iid, "Unary Operation", arg, "->", result)
 
     def _not(self, dyn_ast: str, iid: int, arg: Any, result: Any) -> Any:
+        """@public"""
         self.log(iid, "Unary Operation", arg, "->", result)
 
     def plus(self, dyn_ast: str, iid: int, arg: Any, result: Any) -> Any:
@@ -522,9 +532,11 @@ class TraceAll(BaseAnalysis):
         self.log(iid, "Comparison", left, right, "->", result)
 
     def _in(self, dyn_ast: str, iid: int, left: Any, right: Any, result: Any) -> Any:
+        """@public"""
         self.log(iid, "Comparison", left, right, "->", result)
 
     def _is(self, dyn_ast: str, iid: int, left: Any, right: Any, result: Any) -> Any:
+        """@public"""
         self.log(iid, "Comparison", left, right, "->", result)
 
     def less_than(
@@ -793,7 +805,7 @@ class TraceAll(BaseAnalysis):
 
         value : Any
             The value returned.
-
+        @public
         """
         self.log(iid, "   Returning", value)
 
@@ -819,7 +831,7 @@ class TraceAll(BaseAnalysis):
 
         value : Any
             The value yielded.
-
+        @public
         """
         self.log(iid, "   Yielding", value)
 
@@ -1027,7 +1039,7 @@ class TraceAll(BaseAnalysis):
         -------
         Exception
             If provided, changes the exception raised.
-
+        @public
         """
         self.log(iid, "Exception raised", exc, "because of", cause)
 
@@ -1056,7 +1068,7 @@ class TraceAll(BaseAnalysis):
         -------
         bool
             If provided, changes the condition of assert.
-
+        @public
         """
         self.log(iid, "Asserting", condition, "with message", message)
 
@@ -1262,7 +1274,7 @@ class TraceAll(BaseAnalysis):
         -------
         bool
             If False, cancels the break.
-
+        @public
         """
         self.log(iid, "Break")
 
@@ -1283,7 +1295,7 @@ class TraceAll(BaseAnalysis):
         -------
         bool
             If False, cancels continue.
-
+        @public
         """
         self.log(iid, "Continue")
 
@@ -1344,6 +1356,45 @@ class TraceAll(BaseAnalysis):
 
         """
         self.log(iid, "Caught", caught, "from", exceptions)
+
+    def enter_with(self, dyn_ast: str, iid: int, ctx_manager: ContextManager) -> None:
+        """Hook for entering a with item.
+
+
+        Parameters
+        ----------
+        dyn_ast : str
+            The path to the original code. Can be used to extract the syntax tree.
+
+        iid : int
+            Unique ID of the syntax tree node.
+
+        func : ContextManager
+            The context manager.
+
+        """
+        self.log(iid, "Entered with")
+
+    def exit_with(self, dyn_ast: str, iid: int, is_suppressed: bool, exc_value):
+        """Hook for exiting a with item.
+
+
+        Parameters
+        ----------
+        dyn_ast : str
+            The path to the original code. Can be used to extract the syntax tree.
+
+        iid : int
+            Unique ID of the syntax tree node.
+
+        is_suppressed : bool
+            Whether the exception, if any, inside the with block should be suppressed or not.
+
+        exc_value : Any
+            The exception value, if any, raised inside the with block.
+
+        """
+        self.log(iid, "Exited with")
 
     # Top level
 

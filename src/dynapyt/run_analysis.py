@@ -9,13 +9,12 @@ import sys
 import uuid
 import json
 from pathlib import Path
+from .utils.runtimeUtils import gather_coverage, gather_output
+from .runtime import RuntimeEngine
 
 from dynapyt.utils.initialConfiguration import BaseInitialConfiguration
 from dynapyt.utils.load_class_from_path import load_class_from_path
 from .utils.runtimeUtils import merge_coverage
-
-session_id = str(uuid.uuid4())
-os.environ["DYNAPYT_SESSION_ID"] = session_id
 
 
 def run_analysis(
@@ -55,6 +54,7 @@ def run_analysis(
     str
         The session id for the current run
     """
+    os.environ["DYNAPYT_SESSION_ID"] = session_id = str(uuid.uuid4())
     if entry_args is None:
         entry_args = []
 
@@ -63,6 +63,8 @@ def run_analysis(
             coverage_dir = gettempdir()
         coverage_path = Path(coverage_dir) / f"dynapyt_coverage-{session_id}"
         os.environ["DYNAPYT_COVERAGE"] = str(coverage_path)
+    elif "DYNAPYT_COVERAGE" in os.environ:
+        del os.environ["DYNAPYT_COVERAGE"]
 
     analyses_file = Path(gettempdir()) / f"dynapyt_analyses-{session_id}.txt"
     if analyses_file.exists():
@@ -103,32 +105,15 @@ def run_analysis(
             exec(script, globals_dict)
         elif entry.endswith(".py"):
             exec(open(entry_full_path).read(), globals_dict)
-
-    if "dynapyt.runtime" in sys.modules:
-        runtime_module = sys.modules["dynapyt.runtime"]
-        runtime_module.end_execution()
-        del sys.modules["dynapyt.runtime"]
+    if RuntimeEngine._rt_engine is not None:
+        RuntimeEngine().__del__()
 
     # read all files in output directory and merge them
-    analysis_output = []
-    for output_file in output_dir.glob("output-*.json"):
-        with open(output_dir / output_file, "r") as f:
-            new_output = json.load(f)
-            analysis_output.append(new_output)
-        (output_dir / output_file).unlink()
-    with open(output_dir / "output.json", "w") as f:
-        json.dump(analysis_output, f, indent=2)
+    # gather_output(output_dir)
 
     # read all files in coverage directory and merge them
-    analysis_coverage = {}
-    if coverage:
-        for cov_file in coverage_path.glob("coverage-*.json"):
-            with open(coverage_path / cov_file, "r") as f:
-                new_coverage = json.load(f)
-                analysis_coverage = merge_coverage(analysis_coverage, new_coverage)
-            (coverage_path / cov_file).unlink()
-        with open(coverage_path / "coverage.json", "w") as f:
-            json.dump(analysis_coverage, f)
+    # if coverage:
+    #     gather_coverage(coverage_path)
 
     return session_id
 
@@ -155,7 +140,7 @@ if __name__ == "__main__":
         entry=args.entry,
         analyses=analyses,
         name=name,
-        coverage=args.coverage,
+        coverage=coverage,
         init=init,
         entry_args=entry_args,
         output_dir=output_dir,

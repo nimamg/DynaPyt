@@ -1,4 +1,3 @@
-import sys
 from importlib import import_module
 from os import sep, remove, environ
 from os.path import join, exists
@@ -14,27 +13,32 @@ from dynapyt.instrument.instrument import instrument_file
 from dynapyt.utils.hooks import get_hooks_from_analysis
 from dynapyt.run_analysis import run_analysis
 from dynapyt.analyses.BaseAnalysis import BaseAnalysis
+from dynapyt.utils.runtimeUtils import gather_coverage
 
 
-def correct_output(expected: str, actual: str, exception: Exception) -> bool:
+def correct_output(
+    expected: str, actual: str, exception: Exception
+) -> tuple[bool, int]:
     if exception:
         actual += f"# Exception: {str(exception)}"
-    if actual == expected or actual == expected + "\n":
-        return True
-    actual_lines = actual.strip().split("\n")
-    expected_lines = expected.strip().split("\n")
+    actual = actual.strip()
+    expected = expected.strip()
+    if actual == expected:
+        return True, 0
+    actual_lines = [l.strip() for l in actual.strip().split("\n")]
+    expected_lines = [l.strip() for l in expected.strip().split("\n")]
     if len(actual_lines) != len(expected_lines):
-        return False
+        return False, -1
     for i in range(len(actual_lines)):
         if "<...>" in expected_lines[i]:
             pre_ex, post_ex = expected_lines[i].split("<...>")
             if not (
                 actual_lines[i].startswith(pre_ex) and actual_lines[i].endswith(post_ex)
             ):
-                return False
+                return False, i
         elif actual_lines[i] != expected_lines[i]:
-            return False
-    return True
+            return False, i
+    return True, 0
 
 
 def correct_coverage(expected: str, actual: str) -> bool:
@@ -50,10 +54,6 @@ def test_runner(directory_pair: Tuple[str, str], capsys):
     abs_dir, rel_dir = directory_pair
 
     exception = None
-
-    if "dynapyt.runtime" in sys.modules:
-        # runtime_module = sys.modules["dynapyt.runtime"]
-        del sys.modules["dynapyt.runtime"]
 
     # gather hooks used by the analysis
     module_prefix = rel_dir.replace(sep, ".")
@@ -100,6 +100,7 @@ def test_runner(directory_pair: Tuple[str, str], capsys):
     # analyze
     captured = capsys.readouterr()  # clear stdout
     # print(f"Before analysis: {captured.out}")  # for debugging purposes
+
     try:
         if run_as_file:
             session_id = run_analysis(
@@ -121,9 +122,7 @@ def test_runner(directory_pair: Tuple[str, str], capsys):
             )
     except Exception as e:
         exception = e
-
-    if "DYNAPYT_COVERAGE" in environ:
-        del environ["DYNAPYT_COVERAGE"]
+        session_id = environ.get("DYNAPYT_SESSION_ID", None)
 
     # check output
     expected_file = join(abs_dir, "expected.txt")
@@ -133,15 +132,18 @@ def test_runner(directory_pair: Tuple[str, str], capsys):
     captured = (
         capsys.readouterr()
     )  # read stdout produced by running the analyzed program
-    if not correct_output(expected, captured.out, exception):
+    actual = captured.out
+    output_res = correct_output(expected, actual, exception)
+    if not output_res[0]:
         pytest.fail(
-            f"Output of {rel_dir} does not match expected output.\n--> Expected:\n{expected}\n--> Actual:\n{captured.out}"
+            f"Output of {rel_dir} does not match expected output on line {output_res[1]}.\n--> Expected:\n{expected}\n--> Actual:\n{actual}"
         )
 
     expected_coverage = join(abs_dir, "exp_coverage.json")
     if exists(expected_coverage):
         with open(expected_coverage, "r") as file:
             expected = file.read()
+        gather_coverage(Path(coverage_dir) / f"dynapyt_coverage-{session_id}")
         with open(
             join(coverage_dir, f"dynapyt_coverage-{session_id}", "coverage.json"), "r"
         ) as file:
@@ -171,6 +173,6 @@ def test_runner(directory_pair: Tuple[str, str], capsys):
         if (Path(gettempdir()) / f"dynapyt_output-{session_id}").exists():
             rmtree(Path(gettempdir()) / f"dynapyt_output-{session_id}")
     except FileNotFoundError as fe:
-        print(f"File not found {fe} in {rel_dir}")
+        raise FileNotFoundError(f"File not found {fe} in {rel_dir}")
     except Exception as e:
-        print(f"Something went wrong while cleaning up {rel_dir}: {e}")
+        raise Exception(f"Something went wrong while cleaning up {rel_dir}: {e}")
