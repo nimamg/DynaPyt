@@ -16,17 +16,18 @@ from ..utils.hooks import snake
 from .IIDs import IIDs
 from pathlib import Path
 
-site_sensitive_functions = [
-    "breakpoint",
-    "dir",
-    "eval",
-    "exec",
-    "globals",
-    "help",
-    "locals",
-    "super",
-    "vars",
-]
+site_sensitive_functions = {
+    "breakpoint": QualifiedNameSource.BUILTIN,
+    "dir": QualifiedNameSource.BUILTIN,
+    "eval": QualifiedNameSource.BUILTIN,
+    "exec": QualifiedNameSource.BUILTIN,
+    "globals": QualifiedNameSource.BUILTIN,
+    "help": QualifiedNameSource.BUILTIN,
+    "locals": QualifiedNameSource.BUILTIN,
+    "super": QualifiedNameSource.BUILTIN,
+    "vars": QualifiedNameSource.BUILTIN,
+    "namedtuple": QualifiedNameSource.IMPORT,
+}
 
 
 class CodeInstrumenter(m.MatcherDecoratableTransformer):
@@ -1496,10 +1497,10 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
             name_source = []
         if (
             (len(list(name_source)) > 0)
-            and (list(name_source)[0].source == QualifiedNameSource.BUILTIN)
             and (
                 m.matches(original_node.func, m.Name())
                 and original_node.func.value in site_sensitive_functions
+                and list(name_source)[0].source == site_sensitive_functions[original_node.func.value]
             )
         ):
             call_arg = cst.Arg(value=updated_node)
