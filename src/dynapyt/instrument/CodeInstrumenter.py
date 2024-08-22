@@ -1108,6 +1108,12 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
             val_arg = cst.Arg(value=updated_node.value.value.item)
         elif m.matches(updated_node.value, m.Yield()):
             val_arg = cst.Arg(value=updated_node.value.value)
+        elif m.matches(updated_node.value, m.Tuple()):
+            val_arg = cst.Arg(
+                value=updated_node.value.with_changes(
+                    lpar=[cst.LeftParen()], rpar=[cst.RightParen()]
+                )
+            )
         else:
             val_arg = cst.Arg(value=updated_node.value)
         left_arg = cst.Arg(
@@ -1150,6 +1156,12 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
         iid_arg = cst.Arg(value=cst.Integer(value=str(iid)))
         if m.matches(updated_node.value, m.Yield()):
             val_arg = cst.Arg(value=updated_node.value.value)
+        elif m.matches(updated_node.value, m.Tuple()):
+            val_arg = cst.Arg(
+                value=updated_node.value.with_changes(
+                    lpar=[cst.LeftParen()], rpar=[cst.RightParen()]
+                )
+            )
         else:
             val_arg = cst.Arg(value=updated_node.value)
         left_arg = cst.Arg(
@@ -1218,7 +1230,15 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
             params = node.params.params[0].name
         elif len(node.params.posonly_params) > 0:
             params = node.params.posonly_params[0].name
-        self.current_function.append({"params": params, "name": node.name, "iid": iid})
+        self.current_function.append(
+            {
+                "params": params,
+                "name": node.name,
+                "iid": iid,
+                "is_async": (node.asynchronous is not None),
+                "is_generator": (len(m.findall(node, m.Yield())) > 0),
+            }
+        )
 
     def leave_FunctionDef(
         self, original_node: cst.FunctionDef, updated_node: cst.FunctionDef
@@ -1312,6 +1332,11 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
         return updated_node.with_changes(body=new_stmt)
 
     def leave_Return(self, original_node, updated_node):
+        if (
+            self.current_function[-1]["is_generator"]
+            and self.current_function[-1]["is_async"]
+        ):
+            return original_node
         if "_return" not in self.selected_hooks:
             return updated_node
         callee_name = cst.Attribute(
@@ -1343,7 +1368,7 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
 
     def leave_Yield(self, original_node, updated_node):
         function_metadata = self.current_function[-1]
-        if "yield" not in self.selected_hooks:
+        if "_yield" not in self.selected_hooks:
             return updated_node
         callee_name = cst.Attribute(
             value=cst.Name(value="_rt"), attr=cst.Name(value="_yield_")
