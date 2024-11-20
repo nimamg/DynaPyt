@@ -37,6 +37,7 @@ class IIDs:
         if this_location in self.location_to_iid:
             return self.location_to_iid[this_location]
         self.iid_to_location[self.next_iid] = this_location
+        self.location_to_iid[this_location] = self.next_iid
         self.next_iid += 1
         return self.next_iid - 1
 

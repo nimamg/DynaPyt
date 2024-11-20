@@ -87,6 +87,7 @@
             "exception": {},
             "pre_call": {},
             "post_call": {},
+            "post_call_exception": {},
             "_break": {},
             "_continue": {},
             "function_enter": {},
@@ -94,7 +95,9 @@
                 "_return": {},
                 "_yield": {},
                 "implicit_return": {}
-            }
+            },
+            "function_exit_exception": {},
+            "generator_reentry": {}
         },
         "memory_access": {
             "read": {

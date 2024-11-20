@@ -1262,6 +1262,10 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
             value=cst.Name(value="_rt"), attr=cst.Name(value="_func_exit_")
         )
         self.to_import.add("_func_exit_")
+        # gen_reentry_name = cst.Attribute(
+        #     value=cst.Name(value="_rt"), attr=cst.Name(value="_gen_reentry_")
+        # )
+        # self.to_import.add("_gen_reentry_")
         ast_arg = cst.Arg(value=cst.Name("_dynapyt_ast_"))
         iid_arg = cst.Arg(value=cst.Integer(value=str(function_metadata["iid"])))
         name_arg = cst.Arg(
@@ -1300,8 +1304,32 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
                 + list(updated_node.body.body)
                 + [cst.SimpleStatementLine([exit_stmt])]
             )
+        handler_call = cst.Call(
+            func=cst.Attribute(
+                value=cst.Name(value="_rt"), attr=cst.Name(value="_func_exit_exception_")
+            ),
+            args=[
+                ast_arg,
+                iid_arg,
+                name_arg,
+                cst.Arg(cst.Name("_dynapyt_func_exit_exception"))
+            ],
+        )
+        handler_body = cst.IndentedBlock(
+            body=[cst.SimpleStatementLine(body=[cst.Expr(value=handler_call)]), cst.SimpleStatementLine(body=[cst.Raise()])]
+        )
+        try_body = cst.Try(
+            body=cst.IndentedBlock(body=new_body.body),
+            handlers=[
+                cst.ExceptHandler(
+                    body=handler_body,
+                    type=cst.Name(value="Exception"),
+                    name=cst.AsName(cst.Name(value="_dynapyt_func_exit_exception")),
+                )
+            ],
+        )
         new_node = updated_node
-        return new_node.with_changes(body=new_body)
+        return new_node.with_changes(body=cst.IndentedBlock(body=[try_body]))
 
     def leave_Lambda(self, original_node, updated_node):
         if "lambda" not in self.selected_hooks:
@@ -1677,7 +1705,8 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
     # Control flow
     def leave_IndentedBlock(self, original_node, updated_node):
         if ("_break" not in self.selected_hooks) and (
-            "_continue" not in self.selected_hooks
+            "_continue" not in self.selected_hooks and
+            "generator_reentry" not in self.selected_hooks
         ):
             return updated_node
         new_body = []
@@ -1718,6 +1747,30 @@ class CodeInstrumenter(m.MatcherDecoratableTransformer):
                     ),
                 )
                 new_body.append(condition)
+            elif ("generator_reentry" in self.selected_hooks) and (
+                m.matches(i, m.SimpleStatementLine(body=[m.Expr(value=m.Yield())]))
+            ):
+                gen_reentry_name = cst.Attribute(
+                    value=cst.Name(value="_rt"), attr=cst.Name(value="_gen_reentry_")
+                )
+                self.to_import.add("_gen_reentry_")
+                iid = self.__create_iid(original_node)
+                ast_arg = cst.Arg(value=cst.Name("_dynapyt_ast_"))
+                iid_arg = cst.Arg(value=cst.Integer(value=str(iid)))
+                function_metadata = self.current_function[-1]
+                function_name = cst.Arg(
+                    value=cst.SimpleString(
+                        value=self.__as_string(str(function_metadata["name"].value))
+                    )
+                )
+                function_iid_arg = cst.Arg(
+                    value=cst.Integer(value=str(function_metadata["iid"]))
+                )
+                gen_reentry_stmt = cst.Expr(
+                    cst.Call(func=gen_reentry_name, args=[ast_arg, iid_arg, function_iid_arg, function_name])
+                )
+                new_body.append(i)
+                new_body.append(cst.SimpleStatementLine([gen_reentry_stmt]))
             else:
                 new_body.append(i)
 

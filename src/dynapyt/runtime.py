@@ -13,6 +13,7 @@ import signal
 import json
 import sys
 import os
+import inspect
 from tempfile import gettempdir
 from .utils.hooks import snake, get_name
 from .instrument.IIDs import IIDs
@@ -432,11 +433,15 @@ class RuntimeEngine:
                     kw_args = dict(kw_args, **a)
             pos_args = tuple(tmp)
             self.call_if_exists("pre_call", dyn_ast, iid, call, pos_args, kw_args)
-            result = call(*pos_args, **kw_args)
-            new_res = self.call_if_exists(
-                "post_call", dyn_ast, iid, result, call, pos_args, kw_args
-            )
-            return new_res if new_res is not None else result
+            try:
+                result = call(*pos_args, **kw_args)
+                new_res = self.call_if_exists(
+                    "post_call", dyn_ast, iid, result, call, pos_args, kw_args
+                )
+                return new_res if new_res is not None else result
+            except Exception as e:
+                self.call_if_exists("post_call_exception", dyn_ast, iid, e, call, pos_args, kw_args)
+                raise
 
     def _bool_(self, dyn_ast, iid, val):
         self.call_if_exists("runtime_event", dyn_ast, iid)
@@ -682,6 +687,12 @@ class RuntimeEngine:
         self.call_if_exists("function_exit", dyn_ast, iid, name, None)
         return
 
+    def _func_exit_exception_(self, dyn_ast, iid, name: str, exception: Exception):
+        self.call_if_exists("runtime_event", dyn_ast, iid)
+        self.call_if_exists("control_flow_event", dyn_ast, iid)
+        self.call_if_exists("function_exit_exception", dyn_ast, iid, name, exception)
+        return
+
     def _return_(self, dyn_ast, iid, function_iid, function_name, return_val=None):
         self.call_if_exists("runtime_event", dyn_ast, iid)
         self.call_if_exists("control_flow_event", dyn_ast, iid)
@@ -700,17 +711,22 @@ class RuntimeEngine:
     def _yield_(self, dyn_ast, iid, function_iid, function_name, return_val=None):
         self.call_if_exists("runtime_event", dyn_ast, iid)
         self.call_if_exists("control_flow_event", dyn_ast, iid)
-        result_high = self.call_if_exists(
-            "function_exit", dyn_ast, function_iid, function_name, return_val
-        )
         result_low = self.call_if_exists(
             "_yield", dyn_ast, iid, function_iid, function_name, return_val
+        )
+        result_high = self.call_if_exists(
+            "function_exit", dyn_ast, function_iid, function_name, return_val
         )
         if result_low is not None:
             return result_low
         elif result_high is not None:
             return result_high
         return return_val
+
+    def _gen_reentry_(self, dyn_ast, iid, function_iid, function_name):
+        self.call_if_exists("runtime_event", "", iid)
+        self.call_if_exists("control_flow_event", "", iid)
+        self.call_if_exists("generator_reentry", dyn_ast, iid, function_iid, function_name)
 
     def _assert_(self, dyn_ast, iid, test, msg):
         self.call_if_exists("runtime_event", dyn_ast, iid)
@@ -795,10 +811,21 @@ class RuntimeEngine:
         if iterator is None:
             return
 
+        is_gen_object = inspect.isgenerator(iterator)
+
         new_iter = iter(iterator)
         while True:
             try:
-                it = next(new_iter)
+                if is_gen_object:
+                    try:
+                        self.call_if_exists("enter_generator_iter", dyn_ast, iid, iterator)
+                        it = next(new_iter)
+                        self.call_if_exists("exit_generator_iter", dyn_ast, iid, iterator)
+                    except:
+                        self.call_if_exists("exit_generator_iter_exception", dyn_ast, iid, iterator)
+                        raise
+                else:
+                    it = next(new_iter)
                 result = self._enter_for_(dyn_ast, iid, it, iterator)
                 if result is not None:
                     yield result
