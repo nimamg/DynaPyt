@@ -9,6 +9,8 @@ import sys
 import uuid
 import json
 from pathlib import Path
+
+
 from .utils.runtimeUtils import gather_coverage, gather_output
 from .runtime import RuntimeEngine
 
@@ -27,6 +29,7 @@ def run_analysis(
     script: str = None,
     init : str = None,
     entry_args : List[str] = None,
+    session_id = None
 ) -> str:
     """
     The main function to run the analysis on instrumented code.
@@ -54,7 +57,10 @@ def run_analysis(
     str
         The session id for the current run
     """
-    os.environ["DYNAPYT_SESSION_ID"] = session_id = str(uuid.uuid4())
+    if session_id is None:
+        os.environ["DYNAPYT_SESSION_ID"] = session_id = str(uuid.uuid4())
+    else:
+        os.environ["DYNAPYT_SESSION_ID"] = session_id
     if entry_args is None:
         entry_args = []
 
@@ -129,6 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--init", help="Runs initial configuration")
     parser.add_argument("--args", help="Arguments to pass to entry file", nargs="*")
     parser.add_argument("--output", help="Output directory")
+    parser.add_argument("--session_id", help="custom session id")
     args = parser.parse_args()
     name = args.name
     analyses = args.analysis
@@ -136,6 +143,7 @@ if __name__ == "__main__":
     init = args.init
     entry_args = args.args or []
     output_dir = args.output
+    session_id = args.session_id or None
     run_analysis(
         entry=args.entry,
         analyses=analyses,
@@ -144,4 +152,5 @@ if __name__ == "__main__":
         init=init,
         entry_args=entry_args,
         output_dir=output_dir,
+        session_id = session_id
     )
